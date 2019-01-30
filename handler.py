@@ -4,66 +4,59 @@ import yaml
 import slack
 import slack.chat
 from aiosmtpd.handlers import Message
+from sqlalchemy import create_engine
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy import Column, Integer, String, Sequence
+from sqlalchemy.orm import sessionmaker
+
+
+Base = declarative_base()
+class User(Base):
+    __tablename__ = 'course_users'
+    id = Column(Integer, Sequence('user_id_seq'), primary_key=True)
+    name = Column(String)
+    email = Column(String)
+    access_token = Column(String)
+    raw = Column(String)
+    slack_id = Column(String)
+
+    def __repr__(self):
+        return "<User(name='%s', slack_id='%s', email='%s', access_token='%s', raw='%s')>" % (self.name, self.slack_id, self.email, self.access_token, self.raw)
 
 
 class MessageHandler(Message):
     def __init__(self, *args, **kargs):
         Message.__init__(self, *args, **kargs)
 
-        config = os.getenv('CONFIG', '/etc/slacker/config.yml')
-        print(config)
-        if not os.path.exists(config):
-            print('Config doesn\'t exists!')
-            exit(1)
+        engine = create_engine('TODO: ХАРДКОР!!!!')
+        Session = sessionmaker(bind=engine)
+        self.session = Session()
 
-        self.config = yaml.load(open(config))
+    def get_slack_by_email(session, email):
+        try:
+            user = self.session.query(User).filter_by(email=email).first()
+            return user.slack_id, user.name
+        except Exception as e:
+            print('ERROR: some problem with ' + email + ' ' + str(e))
 
-
+            
     def handle_message(self, message):
         """ This method will be called by aiosmtpd server when new mail will
             arrived.
         """
-        options = self.process_rules(message)
-
-        print('matched', options)
-        self.send_to_slack(message.get_payload(), **options)
-
-        if options['debug']:
-            self.send_to_slack('DEBUG: ' + str(message), **options)
+        
+        slack_id, slack_name = self.get_slack_by_email(message['To'])
+        
+        self.send_to_slack(message.get_payload(), slack_id, slack_name)
 
 
-    def process_rules(self, message):
-        """ Check every rule from config and returns options from matched
-        """
-        default = self.config['default']
+    def send_to_slack(self, text, slack_id, name):
+        print('sending to slack', text, slack_id, name)
 
-        fields = {
-            'from': message['From'],
-            'to': message['To'],
-            'subject': message['Subject'],
-            'body': message.get_payload()
-        }
-
-        print(fields)
-
-        for rule in self.config['rules']:
-            tests = (re.match(rule[field], value) for field, value in fields.items() if field in rule)
-
-            if all(tests):
-                options = default.copy()
-                options.update(rule['options'])
-                return options
-
-        return default
-
-
-    def send_to_slack(self, text, **options):
-        print('sending to slack', text, options)
-
-        slack.api_token = options['slack_token']
+        slack.api_token = 'TODO: ХАРДКОР!!!!'
         slack.chat.post_message(
-            options['channel'],
+            slack_id,
             text,
-            username=options['username'],
-            icon_url=options['icon_url']
+            username=name,
+            icon_url=None
         )
